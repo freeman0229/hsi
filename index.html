@@ -3,35 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Hong Kong Stock Market</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
-
+        
+        :root {
+            --vh: 1vh;
+        }
+        
         body, html {
             width: 100%;
-            height: 100%;
+            height: 100vh;
+            height: calc(var(--vh, 1vh) * 100);
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f5f5f5;
+            -webkit-overflow-scrolling: touch;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
         }
-
+        
         /* Container for the iframe */
         .report-container {
             width: 100%;
             height: 100%;
             position: relative;
+            overflow: hidden;
         }
-
+        
         iframe {
             width: 100%;
             height: 100%;
             border: none;
             display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
         }
-
+        
         /* Loading indicator */
         .loading {
             position: absolute;
@@ -41,48 +60,62 @@
             font-size: 16px;
             color: #666;
             z-index: 1;
+            pointer-events: none;
         }
-
-        /* Mobile Portrait Mode (default) */
+        
+        /* Mobile Portrait Mode */
         @media screen and (max-width: 768px) and (orientation: portrait) {
-            body {
-                background-color: #f5f5f5;
-            }
-            
             .report-container {
                 padding: 0;
             }
+            
+            iframe {
+                transform: scale(1);
+            }
         }
-
+        
         /* Mobile Landscape Mode */
         @media screen and (max-width: 1024px) and (orientation: landscape) {
-            body {
-                background-color: #f5f5f5;
-            }
-            
             .report-container {
                 padding: 0;
             }
+        }
+        
+        /* iPhone specific fixes */
+        @media screen and (max-width: 430px) {
+            body {
+                height: 100vh;
+                height: -webkit-fill-available;
+            }
             
-            /* Ensure full viewport usage in landscape */
-            html, body {
+            .report-container {
                 height: 100vh;
                 height: -webkit-fill-available;
             }
         }
-
+        
         /* Tablet adjustments */
         @media screen and (min-width: 768px) and (max-width: 1024px) {
             .report-container {
                 padding: 10px;
             }
         }
-
-        /* Handle iOS Safari bottom bar */
+        
+        /* Handle iOS Safari bottom bar and safe areas */
         @supports (-webkit-touch-callout: none) {
             body {
                 height: -webkit-fill-available;
             }
+            
+            .report-container {
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+        }
+        
+        /* Prevent iOS text size adjustment */
+        body {
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
         }
     </style>
 </head>
@@ -90,27 +123,81 @@
     <div class="report-container">
         <div class="loading" id="loading">Loading report...</div>
         <iframe 
+            id="reportFrame"
             src="https://lookerstudio.google.com/embed/reporting/640665d2-4278-400c-a832-0082c1b743a1/page/p_3fxq1j5b1d" 
             allowfullscreen
             sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-            onload="document.getElementById('loading').style.display='none'">
+            loading="eager"
+            scrolling="auto">
         </iframe>
     </div>
-
+    
     <script>
-        // Handle viewport height for mobile browsers
+        // Hide loading indicator when iframe loads
+        const iframe = document.getElementById('reportFrame');
+        const loading = document.getElementById('loading');
+        
+        iframe.addEventListener('load', function() {
+            loading.style.display = 'none';
+        });
+        
+        // Handle error case
+        iframe.addEventListener('error', function() {
+            loading.textContent = 'Error loading report. Please refresh the page.';
+            loading.style.color = '#d32f2f';
+        });
+        
+        // Handle viewport height for mobile browsers (especially iOS)
         function setViewportHeight() {
+            // First set using window.innerHeight
             let vh = window.innerHeight * 0.01;
             document.documentElement.style.setProperty('--vh', `${vh}px`);
+            
+            // Force layout recalculation on iOS
+            if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+                setTimeout(() => {
+                    window.scrollTo(0, 1);
+                    window.scrollTo(0, 0);
+                }, 0);
+            }
         }
-
+        
         // Set on load
         setViewportHeight();
-
+        
         // Update on resize and orientation change
-        window.addEventListener('resize', setViewportHeight);
+        let resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(setViewportHeight, 100);
+        });
+        
         window.addEventListener('orientationchange', function() {
-            setTimeout(setViewportHeight, 100);
+            setTimeout(setViewportHeight, 200);
+        });
+        
+        // Prevent double-tap zoom on iOS
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function(event) {
+            const now = Date.now();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+        
+        // Prevent pull-to-refresh on iOS
+        document.body.addEventListener('touchmove', function(event) {
+            if (event.scale !== 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+        
+        // Handle visibility change (when switching apps)
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                setViewportHeight();
+            }
         });
     </script>
 </body>
